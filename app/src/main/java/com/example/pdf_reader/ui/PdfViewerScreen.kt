@@ -6,20 +6,23 @@ import android.content.res.Configuration
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,17 +38,15 @@ import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.ScreenLockLandscape
 import androidx.compose.material.icons.filled.ScreenLockPortrait
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -56,6 +57,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,16 +68,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.pdf_reader.data.RecentPdfStore
 import com.github.barteksc.pdfviewer.PDFView
+import kotlinx.coroutines.delay
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,18 +117,31 @@ fun PdfViewerScreen(
     var currentPage by rememberSaveable { mutableIntStateOf(initialPage) }
     var totalPages by remember { mutableIntStateOf(0) }
 
+    // Fast-scroll progress state (0.0f to 1.0f)
+    var scrollProgress by remember { mutableFloatStateOf(0f) }
+    var isDraggingFastScroll by remember { mutableStateOf(false) }
+    var isUserInteracting by remember { mutableStateOf(false) }
+
     // Search state
-    var isSearchActive by rememberSaveable { mutableStateOf(value = false) }
+    var isSearchActive by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
 
     // Page Jump Dialog state
-    var showJumpDialog by rememberSaveable { mutableStateOf(value = false) }
+    var showJumpDialog by rememberSaveable { mutableStateOf(false) }
 
-    // Reference to PDFView for programmatic page jumps
+    // Reference to PDFView for programmatic page jumps and scrubbing
     var pdfViewRef by remember { mutableStateOf<PDFView?>(null) }
 
-    // Controls TopAppBar and FAB visibility in read mode (single-tap toggles)
-    var isTopBarVisible by remember { mutableStateOf(value = true) }
+    // Controls TopAppBar and handle visibility in read mode (single-tap toggles)
+    var isTopBarVisible by remember { mutableStateOf(true) }
+
+    // Auto-hide the fast scroll handle after inactivity if top bar is hidden
+    LaunchedEffect(isUserInteracting) {
+        if (isUserInteracting && !isDraggingFastScroll) {
+            delay(2500L)
+            isUserInteracting = false
+        }
+    }
 
     // Handles hardware/gesture back press
     BackHandler {
@@ -285,45 +310,19 @@ fun PdfViewerScreen(
                 }
             }
         },
-        floatingActionButton = {
-            // Floating fast-scroll button positioned on the right side
-            AnimatedVisibility(
-                visible = isTopBarVisible && totalPages > 0,
-                enter = fadeIn() + scaleIn(),
-                exit = fadeOut() + scaleOut(),
-            ) {
-                FloatingActionButton(
-                    onClick = { showJumpDialog = true },
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.UnfoldMore,
-                            contentDescription = "Fast-scroll page jump",
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "${currentPage + 1}/$totalPages",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        )
-                    }
-                }
-            }
-        },
     ) { innerPadding ->
+        var containerHeightPx by remember { mutableFloatStateOf(0f) }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(MaterialTheme.colorScheme.background),
-            contentAlignment = Alignment.Center,
+                .background(MaterialTheme.colorScheme.background)
+                .onGloballyPositioned { coordinates ->
+                    containerHeightPx = coordinates.size.height.toFloat()
+                },
         ) {
+            // PDF Viewer Core
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
@@ -342,13 +341,29 @@ fun PdfViewerScreen(
                         .enableAntialiasing(true)
                         .spacing(10)
                         .nightMode(isDarkTheme)
+                        .onLoad { count ->
+                            totalPages = count
+                            if (count > 1) {
+                                scrollProgress = (currentPage.toFloat() / (count - 1).toFloat()).coerceIn(0f, 1f)
+                            }
+                        }
                         .onPageChange { page, count ->
                             currentPage = page
                             totalPages = count
+                            if (!isDraggingFastScroll && count > 1) {
+                                scrollProgress = (page.toFloat() / (count - 1).toFloat()).coerceIn(0f, 1f)
+                            }
                             RecentPdfStore.updateCurrentPage(context, pdfUri, page)
                         }
+                        .onPageScroll { page, _ ->
+                            if (!isDraggingFastScroll) {
+                                currentPage = page
+                                scrollProgress = pdfView.positionOffset.coerceIn(0f, 1f)
+                                isUserInteracting = true
+                            }
+                        }
                         .onTap {
-                            // Single tap toggles TopAppBar and FAB visibility in read mode
+                            // Single tap toggles TopAppBar and handle in read mode
                             isTopBarVisible = !isTopBarVisible
                             true
                         }
@@ -360,6 +375,44 @@ fun PdfViewerScreen(
                         .load()
                 },
             )
+
+            // Adobe-style Fast Scrolling Handle positioned on the right edge
+            val isHandleVisible = totalPages > 1 && (isTopBarVisible || isDraggingFastScroll || isUserInteracting)
+
+            AnimatedVisibility(
+                visible = isHandleVisible,
+                enter = fadeIn() + slideInHorizontally { it },
+                exit = fadeOut() + slideOutHorizontally { it },
+                modifier = Modifier.align(Alignment.TopEnd),
+            ) {
+                AdobeFastScrollHandle(
+                    currentPage = currentPage,
+                    totalPages = totalPages,
+                    scrollProgress = scrollProgress,
+                    containerHeightPx = containerHeightPx,
+                    isDragging = isDraggingFastScroll,
+                    onStartDrag = {
+                        isDraggingFastScroll = true
+                        isUserInteracting = true
+                    },
+                    onDragProgress = { newProgress ->
+                        scrollProgress = newProgress
+                        pdfViewRef?.let { pv ->
+                            pv.setPositionOffset(newProgress, false)
+                            val targetPage = (newProgress * (totalPages - 1)).roundToInt().coerceIn(0, totalPages - 1)
+                            currentPage = targetPage
+                        }
+                    },
+                    onEndDrag = {
+                        isDraggingFastScroll = false
+                        pdfViewRef?.jumpTo(currentPage, false)
+                        RecentPdfStore.updateCurrentPage(context, pdfUri, currentPage)
+                    },
+                    onTap = {
+                        showJumpDialog = true
+                    },
+                )
+            }
         }
     }
 
@@ -375,6 +428,121 @@ fun PdfViewerScreen(
                 showJumpDialog = false
             },
         )
+    }
+}
+
+/**
+ * Adobe Acrobat-style fast scroll handle on the right edge of the screen:
+ * - Single Tap: Opens Search/Jump Page Dialog
+ * - Tap and Hold / Drag: Rapidly scrubs up to down and down to up through pages in real time
+ */
+@Composable
+private fun AdobeFastScrollHandle(
+    currentPage: Int,
+    totalPages: Int,
+    scrollProgress: Float,
+    containerHeightPx: Float,
+    isDragging: Boolean,
+    onStartDrag: () -> Unit,
+    onDragProgress: (Float) -> Unit,
+    onEndDrag: () -> Unit,
+    onTap: () -> Unit,
+) {
+    val density = LocalDensity.current
+    val handleHeightDp = 38.dp
+    val handleHeightPx = with(density) { handleHeightDp.toPx() }
+    val topPaddingPx = with(density) { 16.dp.toPx() }
+    val bottomPaddingPx = with(density) { 16.dp.toPx() }
+
+    val availableTravelPx = (containerHeightPx - topPaddingPx - bottomPaddingPx - handleHeightPx).coerceAtLeast(1f)
+
+    // Current vertical Y offset of the handle
+    var currentHandleY by remember { mutableFloatStateOf(topPaddingPx) }
+
+    // When not dragging, sync handle position with document scroll progress
+    if (!isDragging) {
+        currentHandleY = topPaddingPx + (scrollProgress * availableTravelPx).coerceIn(0f, availableTravelPx)
+    }
+
+    // Smoothly animate width and elevation when touched/held
+    val handleWidth by animateDpAsState(
+        targetValue = if (isDragging) 76.dp else 52.dp,
+        label = "AdobeHandleWidth",
+    )
+    val handleElevation by animateDpAsState(
+        targetValue = if (isDragging) 8.dp else 4.dp,
+        label = "AdobeHandleElevation",
+    )
+
+    Surface(
+        modifier = Modifier
+            .offset { IntOffset(x = 0, y = currentHandleY.roundToInt()) }
+            .width(handleWidth)
+            .height(handleHeightDp)
+            .pointerInput(totalPages, availableTravelPx) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var isDrag = false
+                    val touchSlop = viewConfiguration.touchSlop
+                    var accumulatedDragY = 0f
+
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+
+                        if (change.changedToUp()) {
+                            if (!isDrag) {
+                                // Tap detected -> Open Search / Page Jump Dialog
+                                onTap()
+                            } else {
+                                // Drag ended
+                                onEndDrag()
+                            }
+                            break
+                        }
+
+                        val dragDeltaY = change.positionChange().y
+                        accumulatedDragY += dragDeltaY
+
+                        if (!isDrag && abs(accumulatedDragY) > touchSlop) {
+                            isDrag = true
+                            onStartDrag()
+                        }
+
+                        if (isDrag) {
+                            change.consume()
+                            // Update vertical handle position clamped within travel limits
+                            currentHandleY = (currentHandleY + dragDeltaY).coerceIn(
+                                topPaddingPx,
+                                topPaddingPx + availableTravelPx,
+                            )
+                            val newProgress = ((currentHandleY - topPaddingPx) / availableTravelPx).coerceIn(0f, 1f)
+                            onDragProgress(newProgress)
+                        }
+                    }
+                }
+            },
+        shape = RoundedCornerShape(
+            topStart = 19.dp,
+            bottomStart = 19.dp,
+            topEnd = 0.dp,
+            bottomEnd = 0.dp,
+        ),
+        color = if (isDragging) Color(0xFF111111) else Color(0xFF212121),
+        shadowElevation = handleElevation,
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = if (isDragging) "${currentPage + 1}/$totalPages" else (currentPage + 1).toString(),
+                color = Color.White,
+                fontSize = if (isDragging) 12.sp else 14.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        }
     }
 }
 

@@ -52,10 +52,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.pdf_reader.R
 import com.example.pdf_reader.data.RecentPdf
 import java.io.File
 
@@ -74,15 +76,23 @@ fun HomeScreen(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.PictureAsPdf,
-                            contentDescription = null,
-                            modifier = Modifier.size(28.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
+                        Surface(
+                            modifier = Modifier.size(30.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            shadowElevation = 2.dp,
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.openpdf_logo_img),
+                                contentDescription = "OpenPDF Logo",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(8.dp)),
+                                contentScale = ContentScale.Crop,
+                            )
+                        }
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "PDF Reader",
+                            text = "OpenPDF",
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         )
                     }

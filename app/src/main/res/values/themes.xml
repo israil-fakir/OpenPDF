@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Base application theme after splash screen completes -->
+    <style name="Theme.OpenPDF" parent="android:Theme.Material.Light.NoActionBar" />
 
-<!--    <style name="Theme.PDF_reader" parent="android:Theme.Material.Light.NoActionBar" />-->
+    <!-- Official Android 12+ / androidx.core.splashscreen SplashScreen Theme -->
     <style name="Theme.OpenPDF.Splash" parent="Theme.SplashScreen">
+        <!-- Pure white background -->
         <item name="windowSplashScreenBackground">#FFFFFF</item>
+
+        <!-- Centered vector icon -->
         <item name="windowSplashScreenAnimatedIcon">@drawable/openpdf_logo</item>
+
+        <!-- Post-splash screen theme to transition seamlessly to -->
         <item name="postSplashScreenTheme">@style/Theme.OpenPDF</item>
     </style>
 </resources>

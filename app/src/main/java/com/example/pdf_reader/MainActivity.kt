@@ -11,7 +11,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -22,20 +28,29 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.util.Consumer
 import com.example.pdf_reader.data.RecentPdfStore
 import com.example.pdf_reader.ui.HomeScreen
+import com.example.pdf_reader.ui.OpenPdfSplashScreen
 import com.example.pdf_reader.ui.PdfViewerScreen
 import com.example.pdf_reader.ui.SettingsScreen
 import com.example.pdf_reader.ui.theme.PDF_readerTheme
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Install Android 12+ / AndroidX SplashScreen API before super.onCreate()
+        installSplashScreen()
+
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             var isDarkTheme by remember { mutableStateOf<Boolean?>(null) }
             val systemDarkTheme = isSystemInDarkTheme()
@@ -63,6 +78,9 @@ fun PdfReaderApp(
     val activity = LocalContext.current as? ComponentActivity
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+
+    // Splash screen state: displayed for minimum 1 second during initial startup
+    var isAppInitializing by rememberSaveable { mutableStateOf(true) }
 
     // List of recent files loaded from SharedPreferences
     var recentPdfs by remember {
@@ -106,12 +124,22 @@ fun PdfReaderApp(
         isSettingsOpen = false
     }
 
-    // Handle initial incoming Intent from "Open with" when Activity starts
+    // Perform non-blocking initialization: enforce a minimum display time of 1 second (1000 ms),
+    // and navigate immediately after initialization completes and the minimum display time has elapsed.
     LaunchedEffect(initialIntent) {
-        val uri = extractPdfUri(initialIntent)
-        if (uri != null) {
-            openPdfUri(uri)
+        if (!isAppInitializing) {
+            return@LaunchedEffect
         }
+        val minDisplayJob = async { delay(2000L) }
+        val initJob = async {
+            val uri = extractPdfUri(initialIntent)
+            if (uri != null) {
+                openPdfUri(uri)
+            }
+        }
+        initJob.await()
+        minDisplayJob.await()
+        isAppInitializing = false
     }
 
     // Handle new incoming Intents when app is already running in background
@@ -140,58 +168,69 @@ fun PdfReaderApp(
     val currentUriString = activePdfUriString
     val currentName = activePdfName
 
-    when {
-        currentUriString != null && currentName != null -> {
-            // PDF Viewer Screen with Back, Title, Search, and Rotation
-            PdfViewerScreen(
-                pdfUri = currentUriString.toUri(),
-                pdfName = currentName,
-                initialPage = activePdfInitialPage,
-                isDarkTheme = isDarkTheme,
-                onToggleDarkTheme = onToggleDarkTheme,
-                onBackClick = {
-                    // Return to Home Screen and refresh recent files
-                    activePdfUriString = null
-                    activePdfName = null
-                    activePdfInitialPage = 0
-                    recentPdfs = RecentPdfStore.getRecentPdfs(context)
-                },
-            )
+    Box(modifier = Modifier.fillMaxSize()) {
+        when {
+            currentUriString != null && currentName != null -> {
+                // PDF Viewer Screen with Back, Title, Search, and Rotation
+                PdfViewerScreen(
+                    pdfUri = currentUriString.toUri(),
+                    pdfName = currentName,
+                    initialPage = activePdfInitialPage,
+                    isDarkTheme = isDarkTheme,
+                    onToggleDarkTheme = onToggleDarkTheme,
+                    onBackClick = {
+                        // Return to Home Screen and refresh recent files
+                        activePdfUriString = null
+                        activePdfName = null
+                        activePdfInitialPage = 0
+                        recentPdfs = RecentPdfStore.getRecentPdfs(context)
+                    },
+                )
+            }
+            isSettingsOpen -> {
+                // Settings Screen
+                SettingsScreen(
+                    isDarkTheme = isDarkTheme,
+                    onToggleDarkTheme = onToggleDarkTheme,
+                    onClearRecentFiles = {
+                        RecentPdfStore.clearAllRecentPdfs(context)
+                        recentPdfs = emptyList()
+                    },
+                    onBackClick = {
+                        isSettingsOpen = false
+                    },
+                )
+            }
+            else -> {
+                // Home Screen with Recent PDFs Grid
+                HomeScreen(
+                    recentPdfs = recentPdfs,
+                    onOpenPdfClick = {
+                        pdfPickerLauncher.launch(arrayOf("application/pdf"))
+                    },
+                    onSettingsClick = {
+                        isSettingsOpen = true
+                    },
+                    onPdfSelected = { selected ->
+                        activePdfUriString = selected.uriString
+                        activePdfName = selected.name
+                        activePdfInitialPage = selected.page
+                    },
+                    onRemoveRecentPdf = { toRemove ->
+                        RecentPdfStore.removeRecentPdf(context, toRemove.uriString)
+                        recentPdfs = RecentPdfStore.getRecentPdfs(context)
+                    },
+                )
+            }
         }
-        isSettingsOpen -> {
-            // Settings Screen
-            SettingsScreen(
-                isDarkTheme = isDarkTheme,
-                onToggleDarkTheme = onToggleDarkTheme,
-                onClearRecentFiles = {
-                    RecentPdfStore.clearAllRecentPdfs(context)
-                    recentPdfs = emptyList()
-                },
-                onBackClick = {
-                    isSettingsOpen = false
-                },
-            )
-        }
-        else -> {
-            // Home Screen with Recent PDFs Grid
-            HomeScreen(
-                recentPdfs = recentPdfs,
-                onOpenPdfClick = {
-                    pdfPickerLauncher.launch(arrayOf("application/pdf"))
-                },
-                onSettingsClick = {
-                    isSettingsOpen = true
-                },
-                onPdfSelected = { selected ->
-                    activePdfUriString = selected.uriString
-                    activePdfName = selected.name
-                    activePdfInitialPage = selected.page
-                },
-                onRemoveRecentPdf = { toRemove ->
-                    RecentPdfStore.removeRecentPdf(context, toRemove.uriString)
-                    recentPdfs = RecentPdfStore.getRecentPdfs(context)
-                },
-            )
+
+        // Professional Splash Screen overlay with smooth fade-out when initialization completes
+        AnimatedVisibility(
+            visible = isAppInitializing,
+            enter = fadeIn(),
+            exit = fadeOut(animationSpec = tween(durationMillis = 250)),
+        ) {
+            OpenPdfSplashScreen()
         }
     }
 }

@@ -3,6 +3,7 @@ package com.example.pdf_reader.ui
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,7 +29,6 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -56,9 +56,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.pdf_reader.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -244,36 +247,28 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showAboutDialog = false },
             icon = {
-                Icon(
-                    imageVector = Icons.Default.PictureAsPdf,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(36.dp),
-                )
+                Surface(
+                    modifier = Modifier.size(56.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    shadowElevation = 4.dp,
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.openpdf_logo_img),
+                        contentDescription = "OpenPDF Logo",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(14.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
             },
             title = {
                 Text(
-                    text = "PDF Reader",
+                    text = "OpenPDF",
                     style = MaterialTheme.typography.headlineSmall,
                 )
             },
             text = {
-//                Column {
-//                    Text(
-//                        text = "Version $versionName",
-//                        style = MaterialTheme.typography.labelMedium,
-//                        color = MaterialTheme.colorScheme.primary,
-//                    )
-//                    Spacer(modifier = Modifier.height(12.dp))
-//                    Text(
-//                        text = "A lightweight, modern, open source, and privacy-first PDF viewer.",
-//                        style = MaterialTheme.typography.bodyMedium,
-//                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-//                    )
-//                    Text(
-//                        text = "I am Israil Fakir and i love to build and contributor open source projects",
-//                    )
-//                }
                 Column {
                     Text(
                         text = "Version $versionName",
