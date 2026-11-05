@@ -45,8 +45,12 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Install Android 12+ / AndroidX SplashScreen API before super.onCreate()
-        installSplashScreen()
+        try {
+            // Install Android 12+ / AndroidX SplashScreen API before super.onCreate()
+            installSplashScreen()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -130,7 +134,7 @@ fun PdfReaderApp(
         if (!isAppInitializing) {
             return@LaunchedEffect
         }
-        val minDisplayJob = async { delay(2000L) }
+        val minDisplayJob = async { delay(3000L) }
         val initJob = async {
             val uri = extractPdfUri(initialIntent)
             if (uri != null) {

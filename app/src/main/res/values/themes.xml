@@ -6,9 +6,9 @@
     <!-- Official Android 12+ / androidx.core.splashscreen SplashScreen Theme -->
     <style name="Theme.OpenPDF.Splash" parent="Theme.SplashScreen">
         <!-- Pure white background -->
-        <item name="windowSplashScreenBackground">#FFFFFF</item>
+        <item name="windowSplashScreenBackground">@color/white</item>
 
-        <!-- Centered vector icon -->
+        <!-- Centered icon -->
         <item name="windowSplashScreenAnimatedIcon">@drawable/openpdf_logo</item>
 
         <!-- Post-splash screen theme to transition seamlessly to -->
